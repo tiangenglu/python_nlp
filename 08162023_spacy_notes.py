@@ -12,7 +12,12 @@ raw = pd.read_excel('mig_analysis.xlsx', sheet_name = 'data')
 raw = raw.fillna('')
 theme = pd.read_excel('mig_analysis.xlsx', sheet_name = 'txt_binary')
 raw['raw_text'] = raw['Article Title'].str.cat(raw['Abstract'], sep = '. ')
+import sys
+sys.path.append("/Users/tiangeng/opt/anaconda3/pkgs/spacy-3.1.3-py39ha1f3e3e_0/lib/python3.9/site-packages")
+sys.path=list(set(sys.path))
 import spacy
+print(spacy.__version__)
+print(spacy.__file__)
 # nlp object converts text into a Doc object (container) to store processed text
 nlp = spacy.load("en_core_web_sm")
 
@@ -46,6 +51,8 @@ print([(token.text, token.pos_, spacy.explain(token.pos_)) for token in nlp(samp
 print([(token.text, token.dep_, spacy.explain(token.dep_)) for token in nlp(sample_sent)])
 
 # Word vectors: a pre-defined number of dimensions; considers word frequencies and the presence of other words in similar contexts.
+# Word vectors not functional
+nlp = spacy.load("en_core_web_md") # add this for word.vector
 # Multiple approaches to produce word vectors: word2vec, Glove, fastText, transformer-based architectures
 # spaCy vocabulary is a part of many spaCy models, 'en_core_web_md' has 300-dimensional vectors for 20,000 words.
 print(nlp.meta['vectors'])
@@ -75,9 +82,10 @@ print("Dimension of word vectors: ", md_nlp.meta["vectors"]["width"])
 
 
 words = ["like", "love", "awesome", "horrible", "hate"]
+nlp = spacy.load("en_core_web_md")
 # IDs of all the given words
 ids = [nlp.vocab.strings[w] for w in words]
-
+nlp.vocab.vectors[ids[1]]
 # Store the first ten elements of the word vectors for each word
 # KeyError: '[E058] Could not retrieve vector for key 18194338103975822726.'
 word_vectors = [nlp.vocab.vectors[i][:10] for i in ids]
@@ -428,23 +436,171 @@ for match_id, start, end in matchers:
     print("Start token: ", start, " | End token: ", end, " | Matched text: ", doc[start:end].text)
 
 
+# Why train spaCy models?
+# Better results on specific domain
+# Essential for domain specific text classification
+
+# Before training, ask the following questions
+# Do spaCy models perform well enough on our data?
+# Does our domain include many labels that are absent in spaCy models?
+
+# Models performance on specific data
+import spacy
+nlp = spacy.load("en_core_web_sm")
+text = "The car was navigating to the Oxford Street."
+doc = nlp(text)
+print([(ent.text, ent.label_) for ent in doc.ents])
+# Does our domain include many labels that are absent in spaCy models?
+# Output labels in spaCy models
+# Collect our domain specific data
+# annotate our data
+# determine to update an existing model or train a model from scratch
 
 
+# AttributeError: 'spacy.tokens.token.Token' object has no attribute 'ents'
+jumbo_text = "Product arrived labeled as Jumbo Salted Peanuts., Not sure if the product was labeled as Jumbo."
+documents = nlp(jumbo_text)
+# Append a tuple of (entities text, entities label) if Jumbo is in the entity
+target_entities = []
+for doc in documents:
+  # AttributeError: 'spacy.tokens.token.Token' object has no attribute 'ents'
+  target_entities.extend([(ent.text, ent.label_) for ent in doc.ents if "Jumbo" in ent.text])
+print(target_entities)
 
+# Append True to the correct_labels list if the entity label is `PRODUCT`
+correct_labels = []
+for target in target_entities:
+  if target[1] == "PRODUCT":
+    correct_labels.append(True)
+  else:
+    correct_labels.append(False)
+print(correct_labels)
 
+# Training steps
+# Annotate and prepare input data
+# Initialize the model weight
+# Predict a few examples with the current weights
+# Compare prediction with correct answers
+# Use optimizer to calculate weights that improve model performance
+# Update weights slightly
+# Go back to step 3
 
+# Annotating and preparing data
+# First step is to prepare training data in required format
+# After collecting data, annotate it
+# Annotation means labeling the intent, entities, etc.
+annotated_data = {
+    "sentence": "An antiviral drugs used against influenza is neuraminidase inhibitors.", \
+        "entities": {
+            "label": "Medicine",
+            "value": "neuraminidase inhibitors"}}
+# another ecample of annotated data
+annotated_data = {
+    "sentence": "bill Gates visited the SFO Airport.",  
+    "entities": [{"label": "PERSON", "value": "Gill Gates"},
+        {"label": "LOC", "value": "SFO Airport"}]}
 
+# spacy training data format
+# Data annotation prepares training data for what we want the model to learn
+# Annotated (training dataset) has to be stored as a dictionary
+# Start and end characters are needed
+# Three example pair includes a sentence as the first element
+# Pair's second element is list of annotated entities and start and end characters
+training_data = [
+    ("I will visit you in Austin.", {"entities": [(20, 26, "GPE")]}),
+    ("I'm going to Sam's house.", {"entities": [(13, 18, "PERSON"), (19, 24, "GPE")]}),
+    ("I will go.", {"entities": []})
+    ]
 
+# Example object data for training
+# Cannot feed the raw text directly to spacy
+# need to create an example object for each training example
 
+import spacy
+from spacy.training import Example
+nlp = spacy.load("en_core_web_sm")
+doc = nlp("I will visit you in Austin.")
+annotations = {"entities": [(20, 26, "GPE")]}
+# convert doc container to an example object
+example_sentence = Example.from_dict(doc, annotations)
+# view attributes that are processed and stored at the example object
+print(example_sentence.to_dict())
 
+### Example
+text = "A patient with chest pain had hyperthyroidism."
+entity_1 = "chest pain"
+entity_2 = "hyperthyroidism"
 
+# Store annotated data information in the correct format
+annotated_data = {"sentence": text, 
+                  "entities": [{"label": "SYMPTOM", "value": entity_1},
+                               {"label": "DISEASE", "value": entity_2}]}
 
+# Extract start and end characters of each entity
+# How to find start and end character
+entity_1_start_char = text.find(entity_1) # .find()
+entity_1_end_char = entity_1_start_char + len(entity_1)
+entity_2_start_char = text.find(entity_2)
+entity_2_end_char = entity_2_start_char + len(entity_2)
 
+# Store the same input information in the proper format for training
+training_data = [(text, {"entities": [(entity_1_start_char, entity_1_end_char, "SYMPTOM"), 
+                                      (entity_2_start_char, entity_2_end_char, "DISEASE")]})]
+print(training_data)
 
+all_examples = []
+# Iterate through text and annotations and convert text to a Doc container
+for text, annotations in training_data:
+  doc = nlp(text)
+  
+  # Create an Example object from the doc contianer and annotations
+  example_sentence = Example.from_dict(doc, annotations)
+  print(example_sentence.to_dict(), "\n")
+  
+  # Append the Example object to the list of all examples
+  all_examples.append(example_sentence)
+  
+print("Number of formatted training data: ", len(all_examples))
 
+# Training steps
+# Annotate and prepare input data
+# Disable other pipeline components
+# Train a model for a few epochs
+nlp = spacy.load("en_core_web_sm")
+# Disable all pipeline components except NER
+other_pipes = [pipe for pipe in nlp.pipe_names if pipe != 'ner']
+# ['tok2vec', 'tagger', 'parser', 'attribute_ruler', 'lemmatizer']
+print(other_pipes)
+nlp.disable_pipes(*other_pipes)
+print(f"After disabe other pipes, the remaining pipe is/are: {nlp.pipe_names}")
+# Model training procedure
+# Go over the training set several times: one iteration is called an `epoch`
+# In each epoch, update the weights of the model with a small number
+# Optimizers are functions to update the model weights
+optimizer = nlp.create_optimizer()
+# optimizer = nlp.begin_training() # also used
+# loss is a number of how bad a prediction is
+losses = {}
+for i in ranch(epochs):
+    random.shuffle(training_data)
+    for text, annotation in training_data:
+        doc = nlp.make_doc(text)
+        example = Example.from_dict(doc, annotation)
+        # optimizer object was defined from nlp.create_optimizer()
+        nlp.update([example], sgd = optimizer, losses = losses)
 
+# Save a trained NER model
+ner = nlp.get_pipe("ner")
+ner.to_disk("ner_model_name")
 
+# Load the saved spacy model
+ner = nlp.create_pipe("ner")
+ner.from_disk("ner_model_name")
+nlp.add_pipe(ner, "ner_model_name")
 
-
-
+# Model for inference
+# Use a saved model at inference
+# Apply NER model and store tuples of (entity text, entity label)
+doc = nlp(text)
+entities = [(ent.text, ent.label_) for ent in doc.ents]
 
