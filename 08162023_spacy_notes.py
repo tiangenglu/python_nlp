@@ -580,8 +580,10 @@ print(f"After disabe other pipes, the remaining pipe is/are: {nlp.pipe_names}")
 optimizer = nlp.create_optimizer()
 # optimizer = nlp.begin_training() # also used
 # loss is a number of how bad a prediction is
+import random
 losses = {}
-for i in ranch(epochs):
+epochs = 2
+for i in range(epochs):
     random.shuffle(training_data)
     for text, annotation in training_data:
         doc = nlp.make_doc(text)
